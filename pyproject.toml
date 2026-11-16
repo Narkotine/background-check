@@ -1,0 +1,13 @@
+[project]
+name = "background-check"
+description = "Tableau de bord local : lancer, surveiller et arrêter les services de la machine"
+requires-python = ">=3.11"
+dependencies = ["psutil>=5.9", "Pillow>=10.0"]
+dynamic = ["version"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "pyinstaller>=6.0"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

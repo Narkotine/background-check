@@ -1,0 +1,24 @@
+# Build PyInstaller
+build/
+dist/
+*.spec.bak
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+
+# Divers
+*.log
+nul
+
+
+# Données locales (jamais publiées)
+/config.json
+config.json.bak*
+*.bak
+*.bak-*
+logs/
+*.bundle
+.env
