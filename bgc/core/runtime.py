@@ -12,6 +12,7 @@ from datetime import datetime
 from bgc import applog, i18n, service
 from bgc import presentation as pres
 from bgc import sysinfo
+from bgc.core import deps as deps_mod
 
 
 class ServerRuntime:
@@ -94,12 +95,19 @@ class ServerRuntime:
         if not self.controller:
             return
         try:
-            self.snapshot_data = self.controller.snapshot()
+            snapshot = self.controller.snapshot()
         except Exception as exc:  # pragma: no cover
             applog.LOGGER.exception("snapshot en échec : %s", self.id)
-            self.snapshot_data = {"phase": "unknown", "rows": [], "actions": [], "toggles": [],
-                                  "url": "", "meta": {}, "extra": {},
-                                  "error": str(exc)}
+            snapshot = {"phase": "unknown", "rows": [], "actions": [], "toggles": [],
+                        "url": "", "meta": {}, "extra": {}, "error": str(exc)}
+        # Serveurs liés joints AVANT de publier l'instantané : le fil d'affichage ne doit
+        # jamais voir un instantané sans `deps` (sous-lignes qui clignotent, reconstruction).
+        try:
+            snapshot["deps"] = deps_mod.probe(self)
+        except Exception:  # pragma: no cover
+            applog.LOGGER.exception("serveurs liés : sondage en échec : %s", self.id)
+            snapshot["deps"] = []
+        self.snapshot_data = snapshot
         self._probe_custom_actions()
         phase = self.phase
         if self.last_phase is not None and phase != self.last_phase:

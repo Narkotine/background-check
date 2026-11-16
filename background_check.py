@@ -30,6 +30,7 @@ from bgc import config as config_mod
 from bgc import applog, i18n, instance, mcpserver, service, ui, widgets
 from bgc import APP_NAME, migration
 from bgc.core.actions import Actions, has_something_to_stop, is_stop
+from bgc.core import deps as deps_mod
 from bgc.core.metrics import MetricsSampler, item_key
 from bgc.core.poller import Poller, transition
 from bgc.core.runtime import ServerRuntime
@@ -558,6 +559,8 @@ class App:
                                      actions=payload.get("actions"))
         if disabled:
             self.log_app("log.tile_autostart_disabled", label=payload["label"])
+        if payload.get("deps"):
+            self.cfg.update_server(server["id"], deps=payload["deps"])
         icon = tiles.icon_if_exists(payload["icon"])
         if icon:
             self.cfg.update_server(server["id"], icon=icon)
@@ -619,7 +622,8 @@ class App:
     def apply_server_update(self, server_id: str, label: str | None = None,
                             params: dict | None = None, options: dict | None = None,
                             icon: str | None = None, actions: list | None = None,
-                            enabled: bool | None = None) -> dict | None:
+                            enabled: bool | None = None,
+                            deps: str | None = None) -> dict | None:
         """Applique une modification venue du serveur MCP (ou d'ailleurs) sur le fil Tk.
 
         Le formulaire de réglages n'est PAS reconstruit : si l'utilisateur est en train de
@@ -655,6 +659,9 @@ class App:
         if enabled is not None:
             server["enabled"] = bool(enabled)
             changes["enabled"] = bool(enabled)
+        if deps is not None:
+            server["deps"] = str(deps)[:1000]
+            changes["deps"] = server["deps"]
         self.cfg.update_server(server_id, **changes)
         runtime.refresh()
         self.rebuild_rail()
@@ -776,7 +783,12 @@ class App:
             tile = pres.snapshot_pids(snapshot)
             if not tile:
                 tile = [pid for item in items for pid in item["pids"]]
-            targets.append((runtime.id, tile))
+            deps = [d for d in snapshot.get("deps") or [] if d.get("pids")]
+            dep_pids = [pid for d in deps for pid in d["pids"]]
+            targets.append((runtime.id, tile, dep_pids))
+            # …et réciproquement : un serveur lié parent de la tuile ne compte pas la tuile
+            targets.extend((item_key(runtime.id, deps_mod.dep_key(d["id"])), d["pids"], tile)
+                           for d in deps)
             if pres.has_items(snapshot):
                 targets.extend((item_key(runtime.id, item["id"]), item["pids"])
                                for item in items if item["pids"])

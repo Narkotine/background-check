@@ -63,6 +63,11 @@ class SttBridgeController(Controller):
         return str(self.params.get("upstream") or sttbridge.DEFAULT_UPSTREAM)
 
     # --- sondage ----------------------------------------------------------
+    def dependencies(self) -> list[dict]:
+        """Le serveur whisper (OpenWhispr) vers lequel le pont relaie : surveillé, jamais
+        lancé par nous."""
+        return [{"id": "upstream", "label_key": "dep.stt_upstream", "target": self.upstream}]
+
     def snapshot(self) -> dict:
         ours = self._bridge.running
         pid = sysinfo.listener_pid(self.port) if self.port else None
@@ -122,6 +127,7 @@ class SttBridgeController(Controller):
             "toggles": [{"key": "start_on_app_start", "label_key": "toggle.stt_autostart",
                          "value": bool(self.options.get("start_on_app_start", True))}],
             "meta": {"pid": os.getpid() if ours else pid,
+                     "ports": [{"port": self.port, "role_key": "port.stt_bridge"}],
                      "info": sysinfo.proc_info(os.getpid() if ours else pid)},
             "extra": {"ours": ours, "external": external, "stats": stats},
             "tooltip": {"state_key": ("status.online" if ours else

@@ -93,6 +93,11 @@ class Controller:
         """Vue prête à peindre : phase, entête, lignes, actions, méta."""
         raise NotImplementedError
 
+    def dependencies(self) -> list[dict]:
+        """Serveurs liés que ce type connaît (surveillés, jamais pilotés) — voir
+        `bgc/core/deps.py`. Appelé dans le fil de sondage, après `snapshot()`."""
+        return []
+
     # --- actions ----------------------------------------------------------
     def start(self) -> str:
         return "log.not_running"

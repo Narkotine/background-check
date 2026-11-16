@@ -165,6 +165,12 @@ class CommandController(Controller):
                 items.append((name or target, target))
         return items[:6]
 
+    def dependencies(self) -> list[dict]:
+        """Les sondes supplémentaires (« llama-server = 9931 ») sont des serveurs liés : on
+        les montre aussi comme tels (état, CPU/RAM/VRAM) dans la vue d'ensemble."""
+        return [{"id": f"check{index}", "label": name, "target": target}
+                for index, (name, target) in enumerate(self.extra_checks())]
+
     def _split_target(self, target: str) -> tuple[str, int]:
         if ":" in target:
             host, _, port = target.rpartition(":")

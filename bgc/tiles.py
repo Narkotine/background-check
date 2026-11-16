@@ -51,6 +51,7 @@ def build(server: dict, include_env: bool = False) -> dict:
         "params": params,
         "options": dict(server.get("options") or {}),
         "actions": [dict(item) for item in (server.get("actions") or [])],
+        "deps": str(server.get("deps") or ""),
         "icon": str(server.get("icon") or ""),
     }
 
@@ -80,6 +81,7 @@ def parse(data) -> dict:
         "params": dict(params) if isinstance(params, dict) else {},
         "options": dict(options) if isinstance(options, dict) else {},
         "actions": [item for item in (actions or []) if isinstance(item, dict)][:3],
+        "deps": str(data.get("deps") or "")[:1000],
         "icon": str(data.get("icon") or ""),
     }
 

@@ -2,7 +2,7 @@
 
 Anciennement `hermesserv` : ce nom reste importable (voir `compat.py`)."""
 
-__version__ = "2.4.0"
+__version__ = "2.5.0"
 
 #: Nom affiché (titre de fenêtre, notifications, à propos) — l'UI passe par la clé `app.title`.
 APP_NAME = "Background Check"

@@ -207,6 +207,8 @@ class Config:
                 "icon": str(item.get("icon") or ""),
                 # Actions sur mesure propre à la tuile (max 3) : [{label, target}]
                 "actions": self._normalise_actions(item.get("actions")),
+                # Serveurs liés surveillés (« nom = cible ; … »), voir bgc/core/deps.py
+                "deps": str(item.get("deps") or "")[:1000],
             })
         return {"version": int(raw.get("version") or 1), "general": general, "servers": servers}
 
@@ -319,6 +321,7 @@ class Config:
             "params": dict(server.get("params") or {}),
             "options": dict(server.get("options") or {}),
             "actions": [dict(a) for a in (server.get("actions") or [])],
+            "deps": str(server.get("deps") or ""),
             "icon": str(server.get("icon") or ""),
             "created": int(time.time()),
         }
@@ -336,6 +339,8 @@ class Config:
                 server.setdefault(key, {}).update(value or {})
             elif key == "actions":
                 server["actions"] = self._normalise_actions(value)
+            elif key == "deps":
+                server["deps"] = str(value or "")[:1000]
             elif key in ("label", "enabled", "type", "icon"):
                 server[key] = value
         self.save()

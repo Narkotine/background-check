@@ -103,6 +103,12 @@ class ServerSettingsView(tk.Frame):
                command=lambda value: self.app.set_server_enabled(self.runtime.id, value),
                hint=i18n.t("settings.enabled_hint")).pack(fill="x", pady=(0, sc(10)))
 
+        # ── serveurs liés : surveillés (état, CPU/RAM/VRAM), jamais pilotés ──
+        self.deps_field = TextField(body, i18n.t("field.deps"),
+                                    str(self.runtime.server.get("deps") or ""),
+                                    hint=i18n.t("field.deps_hint"))
+        self.deps_field.pack(fill="x", pady=(sc(6), sc(10)))
+
         # ── actions sur mesure : 3 boutons propres à cette tuile ──
         label_with_info(body, i18n.t("settings.custom_actions").upper(),
                         i18n.t("settings.custom_actions_hint"), fg=T.MUTED, bold=True).pack(
@@ -141,7 +147,8 @@ class ServerSettingsView(tk.Frame):
         raw = _collect_params(server_type, self.fields) if server_type else {}
         actions = [{"label": label.get().strip(), "target": target.get().strip()}
                    for label, target in getattr(self, "custom_fields", [])]
-        return {"params": raw, "icon": self.icon_field.get(), "actions": actions}
+        return {"params": raw, "icon": self.icon_field.get(), "actions": actions,
+                "deps": self.deps_field.get().strip()}
 
     def _reset_from_preset(self, key: str) -> None:
         from tkinter import messagebox
@@ -230,8 +237,10 @@ class ServerSettingsView(tk.Frame):
         icon = self.icon_field.get().strip()
         actions = _collect_actions(getattr(self, "custom_fields", []),
                                    self.runtime.server.get("actions") or [])
+        deps = self.deps_field.get().strip()
         self.app.cfg.update_server(self.runtime.id, label=label, params=params, icon=icon,
-                                   actions=actions)
+                                   actions=actions, deps=deps)
+        self.runtime.server["deps"] = deps
         self.runtime.server["label"] = label
         self.runtime.server["params"] = params
         self.runtime.server["icon"] = icon

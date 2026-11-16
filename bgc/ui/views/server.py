@@ -11,6 +11,7 @@ from bgc import sysinfo
 from bgc.widgets import (Button, Card, ScrollFrame, Toggle, Tooltip, draw_badge, fit_text, font,
                          hint_for, label_with_info, sc)
 from bgc.theme import T
+from bgc.core import deps as deps_mod
 from bgc.core.runtime import ServerRuntime
 from bgc.ui.common import ROW_COLOURS, ghost_button
 from bgc.ui.logpanel import LogPanel
@@ -87,6 +88,11 @@ class ServerView(tk.Frame):
         # Packé seulement si le snapshot publie `items` (modèle « liste d'items »).
         self.items_frame = tk.Frame(body, bg=T.BG)
         self._items_sig = None
+        # Serveurs liés (dont la tuile dépend : serveur whisper du pont STT, llama-server…) :
+        # surveillés seulement, une ligne chacun avec ses ressources.
+        self.deps_frame = tk.Frame(body, bg=T.BG)
+        self._deps_sig = None
+        self._dep_widgets: list[dict] = []
 
         self.buttons_row = tk.Frame(body, bg=T.BG)
         self.buttons_row.pack(fill="x", padx=sc(18))
@@ -116,6 +122,7 @@ class ServerView(tk.Frame):
         self._paint_chain(snapshot)
         self._paint_rows(snapshot)
         self._paint_items(snapshot)
+        self._paint_deps(snapshot)
         self._paint_actions(snapshot)
         self._paint_toggles(snapshot)
         self.log_panel.paint()
@@ -435,6 +442,67 @@ class ServerView(tk.Frame):
             text = pres.metrics_text(pres.metrics_for(self.app, self.runtime, item_id))
             if label.cget("text") != text:
                 label.configure(text=text)
+
+    def _paint_deps(self, snapshot: dict) -> None:
+        """« Serveurs liés » : pastille, nom, cible, état + temps de marche, CPU/RAM/VRAM."""
+        frame = self.deps_frame
+        deps = pres.deps_of(snapshot) if self.runtime.enabled else []
+        if not deps:
+            if frame.winfo_manager():
+                frame.pack_forget()
+            self._deps_sig = None
+            return
+        if not frame.winfo_manager():
+            frame.pack(fill="x", padx=sc(18), pady=(0, sc(12)), before=self.buttons_row)
+        signature = tuple((d["id"], pres.dep_label(d), pres.dep_target(d)) for d in deps)
+        if signature != self._deps_sig:
+            self._deps_sig = signature
+            for child in frame.winfo_children():
+                child.destroy()
+            self._dep_widgets = []
+            title = tk.Frame(frame, bg=T.BG)
+            title.pack(fill="x", pady=(0, sc(4)))
+            heading = tk.Label(title, text=i18n.t("deps.title").upper(), bg=T.BG, fg=T.MUTED,
+                               font=font(9, True), anchor="w")
+            heading.pack(side="left")
+            hint = tk.Label(title, text=i18n.t("deps.watch_only"), bg=T.BG, fg=T.FAINT,
+                            font=font(9), anchor="w")
+            hint.pack(side="left", padx=(sc(10), 0))
+            for widget in (heading, hint):
+                Tooltip(widget, i18n.t("dep.tooltip"), wrap=420)
+            for dep in deps:
+                row = tk.Frame(frame, bg=T.CARD, highlightthickness=1,
+                               highlightbackground=T.BORDER, highlightcolor=T.BORDER)
+                row.pack(fill="x", pady=(0, sc(4)))
+                dot = tk.Canvas(row, width=sc(22), height=sc(22), bg=T.CARD,
+                                highlightthickness=0)
+                dot.pack(side="left", padx=(sc(8), sc(2)), pady=sc(6))
+                text = tk.Frame(row, bg=T.CARD)
+                text.pack(side="left", fill="x", expand=True, padx=(sc(4), sc(8)))
+                tk.Label(text, text=pres.truncate(pres.dep_label(dep), 48), bg=T.CARD,
+                         fg=T.TEXT, font=font(10, True), anchor="w").pack(fill="x")
+                detail = tk.Label(text, text="", bg=T.CARD, fg=T.MUTED, font=font(8),
+                                  anchor="w")
+                detail.pack(fill="x")
+                usage = tk.Label(row, text="", bg=T.CARD, fg=T.FAINT, font=font(8), anchor="e")
+                usage.pack(side="right", padx=(0, sc(10)))
+                self._dep_widgets.append({"dot": dot, "detail": detail, "usage": usage})
+        for dep, widgets in zip(deps, self._dep_widgets):
+            widgets["dot"].delete("all")
+            draw_badge(widgets["dot"], sc(11), sc(11), sc(5), pres.dep_state(dep), ring=T.CARD)
+            parts = [pres.dep_target(dep), i18n.t("dep.up" if dep.get("up") else "dep.down")]
+            uptime = pres.dep_uptime(dep)
+            if uptime != pres.DASH:
+                parts.append(uptime)
+            if dep.get("up") and dep.get("name") and dep.get("port"):
+                parts.append(str(dep["name"]))
+            detail = "  ·  ".join(p for p in parts if p)
+            if widgets["detail"].cget("text") != detail:
+                widgets["detail"].configure(text=detail)
+            metrics = pres.metrics_for(self.app, self.runtime, deps_mod.dep_key(dep["id"]))
+            usage = pres.metrics_text(metrics) if metrics else ""
+            if widgets["usage"].cget("text") != usage:
+                widgets["usage"].configure(text=usage)
 
     def _item_clicked(self, item_id: str, action_id: str, then: str | None) -> None:
         self.app.run_action(self.runtime, action_id, item_id=item_id)

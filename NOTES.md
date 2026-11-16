@@ -1,10 +1,67 @@
 # Background Check (ex-HermesServ) — notes de projet
 
 Journal des constats techniques et des décisions, pour ne pas refaire le raisonnement
-deux fois. Dernière mise à jour : **16 novembre 2026** (v2.4.0).
+deux fois. Dernière mise à jour : **16 novembre 2026** (v2.5.0).
 
 Les captures citées dans ce journal (`apercu_*.png`) sont rangées dans `captures/` depuis le
 11 novembre 2026 ; les chemins historiques ci-dessous s'entendent donc relativement à ce dossier.
+
+## Ports nommés et serveurs liés (16 nov 2026, soir) — version 2.5.0
+
+- Publiée sur GitHub le soir même (commit par-dessus `public`). Captures ajoutées, vérifiées à
+  l'œil et sans métadonnées : `apercu_serveurs_lies.png` (accueil large),
+  `apercu_accueil_compact.png` (fenêtre de 916 px), `apercu_serveurs_lies_stt.png` (page du pont
+  STT). Les captures de la tuile Hermes ne sont **pas** publiées (URL Tailscale, téléphone).
+
+- **« Je ne vois pas les noms »** : la fenêtre de l'utilisateur fait **916×799** (écran 2560×1440).
+  Depuis l'ajout des colonnes CPU/RAM/VRAM (testé seulement à 1180 px), les colonnes fixes
+  (pastille 34, port 64, depuis 90, 3×62, boutons ≥ 250, Hermes ~390) dépassaient la largeur ;
+  la colonne SERVICE (poids 1, **sans minsize**) était écrasée à zéro et les boutons coupés à droite.
+  Correctif : `NAME_MIN` (190 px à l'échelle) et **mode compact** quand la largeur manque
+  (`needed_width()`, hystérésis 24 px, réévalué sur `<Configure>` sans reconstruire) : temps de
+  marche et ressources passent sous le nom.
+- **Port nommé** : sous le numéro, son rôle en petit (« dashboard · gateway », « pont STT », « API »,
+  « interface web ») + infobulle avec la liste complète. Source : `meta.ports` (Hermes, pont STT),
+  sinon déduit (commande avec `url` → interface web, avec `check_url` → API).
+- **Serveurs liés** (`bgc/core/deps.py`) : *surveillés, jamais pilotés*. Sources : le plugin
+  (`dependencies()` : pont STT → serveur whisper amont ; commande → ses `extra_checks`, ex.
+  `llama-server = 9931` ; Hermes → Hermes Desktop) + le champ « Serveurs liés » de la tuile.
+  Sondage dans le fil de la tuile (port local → PID de l'écouteur ; hôte distant → TCP, cache 5 s ;
+  exécutable → balayage des processus, cache 5 s). Doublons fusionnés par cible.
+- **Pas de double comptage** : l'échantillonneur accepte `(clé, pids, exclure)` ; l'arbre d'un
+  serveur lié est retiré de la mesure de la tuile (llama-server enfant de LlamaGUI), sauf s'il en
+  est la racine. Le total VRAM de l'en-tête reste le compteur global de l'adaptateur.
+- MCP : `dependencies` (label, cible, up, pids, uptime_s, metrics) dans `list_items`, `get_server`,
+  `list_servers` ; ce ne sont pas des éléments (`item_action` inchangé) ; `update_server(deps=…)`.
+
+## Dépôt GitHub public (16 nov 2026, 16 h 20)
+
+- **Dépôt** : <https://github.com/Narkotine/background-check> — public, licence MIT
+  (© 2026 Narkotine), **un seul commit** « Background Check v2.4.0 » (`88c0088`), auteur
+  `Narkotine <85788635+Narkotine@users.noreply.github.com>`.
+- **Deux branches locales** :
+  - `main` = l'historique complet (privé, jamais poussé). On continue à y travailler.
+  - `public` = branche orpheline (aucun parent commun avec `main`), suit `github/main`.
+- **Remote `github`** avec `remote.github.push = refs/heads/public:refs/heads/main` : un simple
+  `git push github` ne pousse **que** `public` vers `main` du dépôt. Garde-fou `.git/hooks/pre-push`
+  (local, non versionné) : vers `github`, toute autre branche est refusée, ainsi que tout commit
+  qui contient la racine de `main` (testé : `git push --dry-run github main:main` → refusé).
+- **Publier une nouvelle version** : nettoyer sur `main`, puis fabriquer le nouvel arbre public et
+  l'ajouter **par-dessus** `public` (jamais de merge de `main`) :
+  `GIT_INDEX_FILE=… git read-tree main` → retirer les captures non publiées → `git write-tree` →
+  `git commit-tree <arbre> -p public -m "…"` → `git branch -f public <commit>` → `git push github`.
+- **Ce qui n'est pas publié** : l'historique de `main` ; toutes les captures sauf 8 vérifiées une
+  à une à l'œil (`apercu_metrics*.png`, `apercu_items_accueil*.png`,
+  `apercu_items_services_windows*.png`, `apercu_items_docker_absent.png`, `apercu_wsl_fix.png`,
+  et depuis la v2.5.0 `apercu_serveurs_lies*.png`, `apercu_accueil_compact.png`).
+  L'OCR Windows en a laissé passer (URL Tailscale, chemin perso) : ne publier une capture qu'après
+  l'avoir regardée.
+- **Retiré de `main` aussi** : 24 captures montrant l'URL Tailscale, le nom du téléphone, un chemin
+  `C:\Users\…` ou la fin d'un jeton ; `NOTES.md` et le fichier legacy anonymisés (machine,
+  tailnet, IP 100.x, téléphone, chemins) ; `apercu_metrics_detail.png` caviardée (chemins).
+  Les anciennes versions restent dans l'historique local de `main` (jamais publié).
+- Sauvegarde avant publication : `Documents\HermServ_backup_2026-11-16_github` (bundle `--all`
+  + copie du dossier).
 
 ## Ressources par service : CPU / RAM / VRAM (16 nov 2026, après-midi)
 

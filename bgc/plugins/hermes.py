@@ -72,6 +72,12 @@ class HermesController(Controller):
         self._cache.clear()
 
     # --- sondage ----------------------------------------------------------
+    def dependencies(self) -> list[dict]:
+        """L'application Hermes Desktop : liée (elle parle au gateway), lancée à part."""
+        pid = self._cached("desktop", lambda: sysinfo.desktop_running(self.root))
+        return [{"id": "desktop", "label_key": "dep.hermes_desktop",
+                 "pids": [pid] if pid else [], "up": bool(pid)}]
+
     def snapshot(self) -> dict:
         pid = sysinfo.listener_pid(self.port)
         http = sysinfo.http_probe(f"http://{self.host}:{self.port}/api/status")
@@ -265,7 +271,11 @@ class HermesController(Controller):
                 {"key": "stop_on_quit", "label_key": "toggle.stop_on_quit",
                  "value": bool(self.options.get("stop_on_quit"))},
             ],
-            "meta": {"pid": active_pid, "info": info},
+            "meta": {"pid": active_pid, "info": info,
+                     # deux process possibles (gateway local + dashboard) : tous mesurés
+                     "pids": [p for p in (pid, gw_pid) if p],
+                     "ports": [{"port": p, "role_key": k} for p, k in
+                               ((self.port, "port.dashboard"), (gw_port, "port.gateway")) if p]},
             "extra": {
                 "desktop_pid": desktop_pid,
                 "ours": ours,

@@ -18,6 +18,14 @@ arbre de processus, mesurés toutes les 4 s — en colonnes dans la vue d'ensemb
 des 5 dernières minutes dans le détail, et via le MCP (`metrics`). La VRAM vient des compteurs
 Windows « GPU Process Memory » (toute carte WDDM 2.x : AMD, NVIDIA, Intel) ; « — » s'ils manquent.
 
+Le port de chaque tuile est **nommé** (« 9119 · 8642 » / « dashboard · gateway », « pont STT »,
+« API »…). Les **serveurs liés** — ceux dont une tuile a besoin sans les piloter, comme le serveur
+whisper d'OpenWhispr derrière le pont STT — apparaissent en sous-lignes sous leur tuile, avec état,
+port, temps de marche et CPU / RAM / VRAM comptés à part (jamais deux fois). Le plugin les déclare
+lui-même ; pour les autres, champ « Serveurs liés » des réglages de la tuile : `nom = cible ; …`
+(cible : port, `hôte:port`, URL ou exécutable comme `ollama.exe`). Fenêtre étroite : la vue passe en
+mode compact (ressources sous le nom) au lieu d'écraser la colonne des noms.
+
 ## Démarrer
 
 | Voie | Commande |
@@ -128,6 +136,11 @@ Trois voies, de la plus simple à la plus technique :
 - Ressources par service : `bgc/core/metrics.py` (fil d'échantillonnage, 4 s) et `bgc/gpu.py`
   (VRAM par PDH) ; les PID viennent de `meta.pid` / `meta.pids` de l'instantané et du `pid` des
   éléments — un nouveau type n'a rien d'autre à faire pour être mesuré.
+- Serveurs liés : `bgc/core/deps.py` (déclaration plugin `Controller.dependencies()` + champ
+  `deps` de la tuile, sondage dans le fil de la tuile → `snapshot["deps"]`). Mesures sous la clé
+  « tuile/dep:<id> » ; leur arbre de processus est retiré de celui de la tuile. Rôle des ports :
+  `meta.ports = [{port, role_key}]` dans l'instantané. MCP : `dependencies` dans `list_items`,
+  `get_server` et `list_servers` ; `update_server(deps=…)`.
 - Nom affiché de l'app : clé `app.title` (jamais en dur dans un nouveau texte).
 - Vérification visuelle : `--shot` photographie **la fenêtre** (pas l'écran), ce qui évite de
   capturer par-dessus.

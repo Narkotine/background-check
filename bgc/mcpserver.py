@@ -43,6 +43,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from . import __version__, i18n, presets, service, sysinfo
 from . import presentation as pres
+from .core import deps as deps_mod
 
 HOST = "127.0.0.1"
 DEFAULT_PORT = 8781
@@ -221,7 +222,10 @@ class McpTools:
                  "on each item (ids to pass to item_action). A tile type without items is "
                  "returned as one implicit item with id \"\" whose actions are the tile's. Each "
                  "item carries metrics (cpu_percent, ram_mb, vram_mb) when its processes are "
-                 "known, else null.",
+                 "known, else null. `dependencies` lists the related servers the tile relies on "
+                 "(e.g. the whisper server behind the STT bridge): label, target (port, "
+                 "host:port or process), up, pids, uptime_s and metrics. They are watched only "
+                 "and are not valid item ids.",
                  _schema({"server_id": sid}, ["server_id"]), self._list_items, read_only=True),
             Tool("item_action", "Run item action",
                  "Run one action on one item of a tile, exactly like its button in the window "
@@ -259,7 +263,10 @@ class McpTools:
                  "merged into the current params (pass an empty string to clear a field). The "
                  "merged params are validated by the server type; unknown keys are reported and "
                  "ignored, and nothing is written if validation fails. Use `enabled` to pause or "
-                 "resume monitoring. Returns the updated tile and a config backup path.",
+                 "resume monitoring. `deps` declares extra related servers to watch (not start), as "
+                 "\"name = target; …\" where target is a port, host:port, URL or process name "
+                 "(ollama.exe); empty string clears them. Returns the updated tile and a config "
+                 "backup path.",
                  _schema({
                      "server_id": sid,
                      "label": {"type": "string"},
@@ -269,6 +276,8 @@ class McpTools:
                      "icon": {"type": "string",
                               "description": "Existing path, or empty string to clear the icon."},
                      "enabled": {"type": "boolean"},
+                     "deps": {"type": "string",
+                              "description": "Related servers: \"name = target; …\"."},
                  }, ["server_id"]), self._update_server),
             Tool("delete_server", "Delete server",
                  "Delete a tile. `confirm` must repeat the server id. This only removes the tile "
@@ -412,6 +421,7 @@ class McpTools:
         return {
             "id": runtime.id,
             "type": str(runtime.server.get("type") or ""),
+            "deps": str(runtime.server.get("deps") or ""),
             "label": runtime.label,
             "enabled": runtime.enabled,
             "phase": runtime.phase,
@@ -425,7 +435,31 @@ class McpTools:
             "custom_actions": [dict(item) for item in (runtime.server.get("actions") or [])],
             "probe_error": str(snapshot.get("error") or ""),
             "metrics": self._metrics(runtime) if runtime.enabled else None,
+            "ports": [{"port": port, "role": i18n.t(role) if role else ""}
+                      for port, role in pres.port_entries(runtime.server, snapshot)],
+            "dependencies": self._dependencies(runtime),
         }
+
+    def _dependencies(self, runtime) -> list[dict]:
+        """Serveurs liés (surveillés seulement), avec leurs ressources mesurées à part : la
+        mesure de la tuile les exclut, rien n'est compté deux fois."""
+        if not runtime.enabled:
+            return []
+        out = []
+        now = time.time()
+        for dep in pres.deps_of(runtime.snapshot_data):
+            started = dep.get("started")
+            out.append({
+                "id": dep.get("id"), "label": pres.dep_label(dep),
+                "source": dep.get("source") or "",
+                "target": pres.dep_target(dep), "host": dep.get("host") or "",
+                "port": dep.get("port"), "process": dep.get("process") or "",
+                "up": bool(dep.get("up")), "pids": list(dep.get("pids") or []),
+                "process_name": dep.get("name") or "",
+                "uptime_s": round(now - started) if dep.get("up") and started else None,
+                "metrics": self._metrics(runtime, deps_mod.dep_key(str(dep.get("id")))),
+            })
+        return out
 
     def _status(self, runtime) -> dict:
         snapshot = runtime.snapshot_data or {}
@@ -449,6 +483,7 @@ class McpTools:
             result["items"] = [self._item(item, self._metrics(runtime, item["id"]))
                                for item in pres.items_of(snapshot)]
         result["metrics"] = self._metrics(runtime) if runtime.enabled else None
+        result["dependencies"] = self._dependencies(runtime)
         return result
 
     @staticmethod
@@ -723,7 +758,8 @@ class McpTools:
         return {"server_id": runtime.id, "label": runtime.label, "phase": runtime.phase,
                 "has_items": pres.has_items(runtime.snapshot_data), "count": len(items),
                 "items": [self._item(item, self._item_metrics(runtime, item))
-                          for item in items]}
+                          for item in items],
+                "dependencies": self._dependencies(runtime)}
 
     def _item_metrics(self, runtime, item: dict) -> dict | None:
         """Élément implicite (type sans `items`) = la tuile elle-même."""
@@ -895,12 +931,20 @@ class McpTools:
         enabled = None
         if "enabled" in args:
             enabled = _as_bool(args["enabled"])
+        deps = None
+        if "deps" in args:
+            deps = str(args.get("deps") or "")
+            dropped = len([p for p in deps.replace("\n", ";").split(";") if p.strip()]) - len(
+                deps_mod.parse_spec(deps))
+            if dropped > 0:
+                warnings.append(f"{dropped} related-server entr{'y' if dropped == 1 else 'ies'} "
+                                "ignored (expected \"name = target\", at most 8).")
 
         def job():
             backup = self._backup_config()
             self.app.apply_server_update(server_id, label=label, params=params,
                                          options=options, icon=icon, actions=actions,
-                                         enabled=enabled)
+                                         enabled=enabled, deps=deps)
             return backup
 
         backup = self.app.ui_call(job)

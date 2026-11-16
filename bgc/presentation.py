@@ -468,3 +468,82 @@ def gpu_text(total: dict | None) -> str:
         return i18n.t("overview.gpu", used=fmt_mb(total["used_mb"]),
                       total=fmt_mb(total["total_mb"]))
     return i18n.t("overview.gpu_used", used=fmt_mb(total["used_mb"]))
+
+
+# --- ports avec leur rôle, serveurs liés (16 nov 2026, retour « je ne vois pas les noms ») --
+_DEFAULT_PORT_ROLE = {"stt": "port.stt_bridge"}
+
+
+def port_entries(server: dict, snapshot: dict | None) -> list[tuple[int, str]]:
+    """[(port, clé du rôle ou "")] : ceux que le plugin publie (`meta.ports`), sinon le port
+    de la tuile avec un rôle déduit (interface web, API…)."""
+    meta = (snapshot or {}).get("meta") or {}
+    out = []
+    for entry in meta.get("ports") or []:
+        try:
+            out.append((int(entry.get("port")), str(entry.get("role_key") or "")))
+        except (TypeError, ValueError, AttributeError):
+            continue
+    if out:
+        return out
+    params = server.get("params") or {}
+    try:
+        port = int(params.get("port") or 0)
+    except (TypeError, ValueError):
+        port = 0
+    if not port:
+        return []
+    role = _DEFAULT_PORT_ROLE.get(str(server.get("type") or ""), "")
+    if not role:
+        role = ("port.web" if params.get("url") else
+                "port.api" if params.get("check_url") else "")
+    return [(port, role)]
+
+
+def port_cells(server: dict, snapshot: dict | None) -> tuple[str, str, str]:
+    """(ports, rôles, infobulle) pour la colonne PORT : « 9119 · 8642 » / « dashboard ·
+    gateway ». Deux ports au plus sur la ligne, le reste dans l'infobulle."""
+    from bgc import i18n
+    entries = port_entries(server, snapshot)
+    if not entries:
+        return DASH, "", ""
+    top = " · ".join(str(port) for port, _ in entries[:2])
+    if len(entries) > 2:
+        top += f" +{len(entries) - 2}"
+    roles = [i18n.t(role) for _, role in entries[:2] if role]
+    tip = "\n".join(f"{port} — {i18n.t(role)}" if role else str(port) for port, role in entries)
+    return top, " · ".join(roles), tip
+
+
+def deps_of(snapshot: dict | None) -> list[dict]:
+    return [d for d in (snapshot or {}).get("deps") or [] if isinstance(d, dict)]
+
+
+def dep_label(dep: dict) -> str:
+    from bgc import i18n
+    if dep.get("label"):
+        return str(dep["label"])
+    if dep.get("label_key"):
+        return i18n.t(dep["label_key"])
+    return str(dep.get("target") or dep.get("id") or "?")
+
+
+def dep_target(dep: dict) -> str:
+    """Ce qu'on surveille : « 8178 », « hôte:8123 », « ollama.exe » ou le nom du process."""
+    if dep.get("port"):
+        host = str(dep.get("host") or "")
+        local = host.lower() in ("", "127.0.0.1", "localhost", "::1", "0.0.0.0")
+        return str(dep["port"]) if local else f"{host}:{dep['port']}"
+    return str(dep.get("process") or dep.get("name") or "")
+
+
+def dep_uptime(dep: dict, now: float | None = None) -> str:
+    from bgc import sysinfo
+    started = dep.get("started")
+    if not dep.get("up") or not started:
+        return DASH
+    return sysinfo.fmt_uptime(max(0.0, (now or time.time()) - float(started)))
+
+
+def dep_state(dep: dict) -> str:
+    return "ok" if dep.get("up") else "idle"

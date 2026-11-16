@@ -110,11 +110,26 @@ def tree(cache: ProcessCache, root: int) -> list[psutil.Process]:
 
 
 def measure(cache: ProcessCache, roots: Iterable[int], vram: dict[int, int] | None,
-            cpus: int) -> dict | None:
+            cpus: int, exclude: Iterable[int] = ()) -> dict | None:
+    """Somme sur l'arbre de `roots`, **moins** les arbres de `exclude` (un serveur lié lancé
+    par la tuile — llama-server enfant de LlamaGUI — est compté à part, pas deux fois)."""
+    roots = list(roots)
+    skipped: set[int] = set()
+    for root in exclude:
+        if root in roots:
+            continue
+        branch = {proc.pid for proc in tree(cache, root)}
+        # une de nos racines dans cette branche (dashboard lancé par Hermes Desktop) : on garde
+        # sa sous-arborescence, seule la partie « à l'autre » est retirée
+        for own in roots:
+            if own in branch:
+                branch -= {proc.pid for proc in tree(cache, own)}
+        skipped |= branch
     procs: dict[int, psutil.Process] = {}
     for root in roots:
         for proc in tree(cache, root):
-            procs.setdefault(proc.pid, proc)
+            if proc.pid not in skipped:
+                procs.setdefault(proc.pid, proc)
     if not procs:
         return None
     cpu, rss = 0.0, 0
@@ -133,7 +148,8 @@ def measure(cache: ProcessCache, roots: Iterable[int], vram: dict[int, int] | No
 
 
 class MetricsSampler:
-    """`targets()` (appelé depuis le fil d'échantillonnage) → [(clé, [pid…]), …]."""
+    """`targets()` (appelé depuis le fil d'échantillonnage) → [(clé, [pid…]), …] ou
+    [(clé, [pid…], [pid à exclure…]), …]."""
 
     def __init__(self, targets: Callable[[], list[tuple[str, list[int]]]],
                  interval: float = INTERVAL, gpu=None):
@@ -196,10 +212,12 @@ class MetricsSampler:
         self._passes += 1
         now = time.time()
         latest: dict[str, dict] = {}
-        for key, pids in self._targets():
+        for target in self._targets():
+            key, pids = target[0], target[1]
+            exclude = target[2] if len(target) > 2 else ()
             if not pids:
                 continue
-            value = measure(self._cache, pids, self._vram, self.cpus)
+            value = measure(self._cache, pids, self._vram, self.cpus, exclude)
             if value is not None:
                 value["at"] = now
                 latest[key] = value
